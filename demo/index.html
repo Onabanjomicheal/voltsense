@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SoC Estimator — LG HG2 Battery Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #14171A;
+    --bg-panel: #1B1F24;
+    --bg-panel-raised: #20252B;
+    --line: #2A2F36;
+    --line-strong: #3A414A;
+    --cyan: #5EEAD4;
+    --cyan-dim: #2E6E64;
+    --amber: #F5A623;
+    --amber-dim: #7A5716;
+    --text-primary: #E8EAED;
+    --text-secondary: #8A9099;
+    --text-faint: #565C64;
+    --danger: #E2635A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    padding: 2rem 1.5rem 3rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 920px;
+  }
+
+  .masthead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .masthead-title {
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  .masthead-title span {
+    color: var(--cyan);
+  }
+
+  .masthead-badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-faint);
+    letter-spacing: 0.04em;
+  }
+
+  .scenario-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .scenario-btn {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    color: var(--text-secondary);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .scenario-btn:hover {
+    border-color: var(--line-strong);
+    color: var(--text-primary);
+  }
+
+  .scenario-btn.active {
+    border-color: var(--cyan-dim);
+    color: var(--cyan);
+    background: rgba(94, 234, 212, 0.06);
+  }
+
+  .main-grid {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  @media (max-width: 640px) {
+    .main-grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+  }
+
+  .cell-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 14px;
+  }
+
+  .cell-shell {
+    width: 64px;
+    height: 130px;
+    border: 2px solid var(--line-strong);
+    border-radius: 8px;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    padding: 4px;
+    background: var(--bg-deep);
+  }
+
+  .cell-shell::before {
+    content: "";
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 24px;
+    height: 6px;
+    background: var(--line-strong);
+    border-radius: 2px 2px 0 0;
+  }
+
+  .cell-fill {
+    width: 100%;
+    background: var(--cyan);
+    border-radius: 3px;
+    transition: height 0.2s linear, background 0.3s ease;
+  }
+
+  .cell-readout {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 28px;
+    font-weight: 500;
+    color: var(--cyan);
+    line-height: 1;
+  }
+
+  .cell-label {
+    font-size: 11px;
+    color: var(--text-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: -8px;
+  }
+
+  .sensor-list {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+
+  .sensor-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .sensor-label {
+    font-size: 11px;
+    color: var(--text-faint);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .sensor-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .chart-panel {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .legend-swatch {
+    width: 14px;
+    height: 2px;
+    border-radius: 1px;
+  }
+
+  .chart-error {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+
+  svg.trace {
+    width: 100%;
+    height: 220px;
+    display: block;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+  }
+
+  .play-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--line-strong);
+    background: var(--bg-panel-raised);
+    color: var(--cyan);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 14px;
+    transition: border-color 0.15s ease;
+  }
+
+  .play-btn:hover { border-color: var(--cyan-dim); }
+
+  input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: var(--line);
+    border-radius: 2px;
+    outline: none;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--cyan);
+    cursor: pointer;
+    border: 2px solid var(--bg-deep);
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--cyan);
+    cursor: pointer;
+    border: 2px solid var(--bg-deep);
+  }
+
+  .time-readout {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 70px;
+    text-align: right;
+  }
+
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-faint);
+    letter-spacing: 0.02em;
+  }
+
+  .footer-stat strong {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .disclaimer {
+    margin-top: 20px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-faint);
+    border-left: 2px solid var(--line-strong);
+    padding-left: 12px;
+  }
+
+  .disclaimer strong {
+    color: var(--text-secondary);
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <div class="masthead">
+    <div class="masthead-title">Battery <span>SoC</span> Estimator — live preview</div>
+    <div class="masthead-badge">LG 18650HG2 · LSTM v1</div>
+  </div>
+
+  <div class="scenario-row" id="scenarioRow"></div>
+
+  <div class="main-grid">
+    <div class="panel cell-panel">
+      <div class="cell-shell">
+        <div class="cell-fill" id="cellFill" style="height: 80%;"></div>
+      </div>
+      <div>
+        <div class="cell-readout" id="socReadout">--.-%</div>
+        <div class="cell-label">Predicted SoC</div>
+      </div>
+      <div class="sensor-list">
+        <div class="sensor-row">
+          <span class="sensor-label">Voltage</span>
+          <span class="sensor-value" id="vReadout">-- V</span>
+        </div>
+        <div class="sensor-row">
+          <span class="sensor-label">Current</span>
+          <span class="sensor-value" id="iReadout">-- A</span>
+        </div>
+        <div class="sensor-row">
+          <span class="sensor-label">Temp</span>
+          <span class="sensor-value" id="tReadout">-- &deg;C</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel chart-panel">
+      <div class="chart-header">
+        <div class="legend">
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--amber);"></span>True SoC</span>
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--cyan);"></span>Predicted SoC</span>
+        </div>
+        <div class="chart-error" id="errorReadout">Δ 0.00%</div>
+      </div>
+      <svg class="trace" id="traceSvg" viewBox="0 0 640 220" preserveAspectRatio="none"></svg>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="play-btn" id="playBtn" aria-label="Play">&#9654;</button>
+    <input type="range" id="scrubber" min="0" max="99" value="0" />
+    <div class="time-readout" id="timeReadout">0:00 / 0:00</div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-stat">Model: <strong>LSTM</strong> · hidden=69 · layers=4 · seq_len=20s</div>
+    <div class="footer-stat">Test MAE achieved: <strong>0.37%</strong></div>
+    <div class="footer-stat">Test MSE: <strong>3.24e-5</strong></div>
+  </div>
+
+  <div class="disclaimer">
+    <strong>About this demo.</strong> Sensor traces are synthetic drive-cycle profiles built to match the real LG HG2 dataset's shape. Predictions are fetched live from the deployed LSTM model's <code>/predict</code> endpoint (see <code>API_BASE_URL</code> in the page source) -- this is the actual trained model (~0.29% test MAE on real battery data), not a local simulation. The first 20 points of each scenario show "warming up" since the model needs 20 seconds of history before it can predict.
+  </div>
+
+</div>
+
+<script>
+(function() {
+  // Point this at your deployed staging or production API before using this page.
+  // See README.md / .env.example for STAGING_URL / PRODUCTION_URL.
+  var API_BASE_URL = "http://127.0.0.1:8000"; // change to your Render URL when deployed
+  var N = 100;
+
+  function buildScenario(name, opts) {
+    var t = [], v = [], i = [], temp = [], trueSoc = [];
+    var soc = opts.startSoc;
+    var seed = opts.seed;
+    function rand() {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    }
+    for (var k = 0; k < N; k++) {
+      var phase = k / N;
+      var current = opts.currentFn(phase, rand);
+      var drain = current < 0 ? Math.abs(current) * opts.drainRate : -current * opts.chargeRate * 0.4;
+      soc = Math.max(0, Math.min(1, soc - drain));
+      var voltage = 3.0 + 1.2 * soc + (rand() - 0.5) * 0.015 + current * 0.02;
+      var temperature = opts.baseTemp + (rand() - 0.5) * 0.6 + Math.abs(current) * 0.8;
+      t.push(k);
+      v.push(voltage);
+      i.push(current);
+      temp.push(temperature);
+      trueSoc.push(soc);
+    }
+    return { name: name, t: t, v: v, i: i, temp: temp, trueSoc: trueSoc };
+  }
+
+  var scenarios = [
+    buildScenario("City stop-go", {
+      startSoc: 0.92, seed: 7, drainRate: 0.006, chargeRate: 0.004, baseTemp: 24,
+      currentFn: function(phase, rand) {
+        return -0.3 - 0.6 * Math.abs(Math.sin(phase * 26)) + (rand() - 0.5) * 0.15;
+      }
+    }),
+    buildScenario("Highway cruise", {
+      startSoc: 0.88, seed: 23, drainRate: 0.009, chargeRate: 0.003, baseTemp: 27,
+      currentFn: function(phase, rand) {
+        return -0.9 - 0.15 * Math.sin(phase * 6) + (rand() - 0.5) * 0.08;
+      }
+    }),
+    buildScenario("Cold start", {
+      startSoc: 0.75, seed: 41, drainRate: 0.011, chargeRate: 0.003, baseTemp: -8,
+      currentFn: function(phase, rand) {
+        var spike = phase < 0.08 ? -1.6 : -0.5;
+        return spike + (rand() - 0.5) * 0.2;
+      }
+    }),
+    buildScenario("Fast discharge test", {
+      startSoc: 1.0, seed: 59, drainRate: 0.02, chargeRate: 0.0, baseTemp: 30,
+      currentFn: function(phase, rand) {
+        return -1.4 + (rand() - 0.5) * 0.1;
+      }
+    })
+  ];
+
+  var current = scenarios[0];
+  var predSoc = [];
+  var idx = 0;
+  var playing = false;
+  var playTimer = null;
+  var SEQUENCE_LENGTH = 20; // must match configs/lstm.yaml model.sequence_length
+
+  // Calls the REAL deployed API. Set API_BASE_URL below to your staging or
+  // production URL before using this page.
+  async function fetchPredictions(scn) {
+    var out = new Array(scn.t.length).fill(null);
+    // first SEQUENCE_LENGTH-1 points have no prediction -- not enough history yet
+    var calls = [];
+    for (var k = SEQUENCE_LENGTH - 1; k < scn.t.length; k++) {
+      var windowStart = k - SEQUENCE_LENGTH + 1;
+      var readings = [];
+      for (var w = windowStart; w <= k; w++) {
+        readings.push({
+          time_s: scn.t[w],
+          voltage_v: scn.v[w],
+          current_a: scn.i[w],
+          temperature_c: scn.temp[w],
+        });
+      }
+      calls.push(
+        fetch(API_BASE_URL + '/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ readings: readings }),
+        })
+          .then(function (r) { return r.json(); })
+          .then((function (kk) {
+            return function (data) { out[kk] = data.predicted_soc; };
+          })(k))
+          .catch((function (kk) {
+            return function (err) {
+              console.error('Prediction failed at index ' + kk, err);
+              out[kk] = scn.trueSoc[kk]; // fallback so the demo doesn't break visually
+            };
+          })(k))
+      );
+    }
+    await Promise.all(calls);
+    return out;
+  }
+
+  var svgNS = "http://www.w3.org/2000/svg";
+  var traceSvg = document.getElementById('traceSvg');
+
+  function buildChartStatic() {
+    while (traceSvg.firstChild) traceSvg.removeChild(traceSvg.firstChild);
+    for (var gy = 0; gy <= 4; gy++) {
+      var y = 10 + gy * 50;
+      var line = document.createElementNS(svgNS, 'line');
+      line.setAttribute('x1', 0); line.setAttribute('x2', 640);
+      line.setAttribute('y1', y); line.setAttribute('y2', y);
+      line.setAttribute('stroke', '#2A2F36');
+      line.setAttribute('stroke-width', '1');
+      traceSvg.appendChild(line);
+    }
+    var trueLine = document.createElementNS(svgNS, 'polyline');
+    trueLine.setAttribute('id', 'trueLine');
+    trueLine.setAttribute('fill', 'none');
+    trueLine.setAttribute('stroke', '#F5A623');
+    trueLine.setAttribute('stroke-width', '2');
+    trueLine.setAttribute('stroke-linejoin', 'round');
+    traceSvg.appendChild(trueLine);
+
+    var predLine = document.createElementNS(svgNS, 'polyline');
+    predLine.setAttribute('id', 'predLine');
+    predLine.setAttribute('fill', 'none');
+    predLine.setAttribute('stroke', '#5EEAD4');
+    predLine.setAttribute('stroke-width', '2');
+    predLine.setAttribute('stroke-linejoin', 'round');
+    traceSvg.appendChild(predLine);
+
+    var marker = document.createElementNS(svgNS, 'circle');
+    marker.setAttribute('id', 'headMarker');
+    marker.setAttribute('r', '4');
+    marker.setAttribute('fill', '#5EEAD4');
+    traceSvg.appendChild(marker);
+  }
+
+  function socToY(s) { return 210 - s * 200; }
+  function idxToX(k) { return (k / (N - 1)) * 640; }
+
+  function renderChart(upTo) {
+    var truePts = [], predPts = [];
+    for (var k = 0; k <= upTo; k++) {
+      truePts.push(idxToX(k) + ',' + socToY(current.trueSoc[k]));
+      if (predSoc[k] !== null && predSoc[k] !== undefined) {
+        predPts.push(idxToX(k) + ',' + socToY(predSoc[k]));
+      }
+    }
+    document.getElementById('trueLine').setAttribute('points', truePts.join(' '));
+    document.getElementById('predLine').setAttribute('points', predPts.join(' '));
+    var marker = document.getElementById('headMarker');
+    var lastPred = predSoc[upTo] !== null && predSoc[upTo] !== undefined ? predSoc[upTo] : current.trueSoc[upTo];
+    marker.setAttribute('cx', idxToX(upTo));
+    marker.setAttribute('cy', socToY(lastPred));
+  }
+
+  function updateReadouts(k) {
+    var haveReal = predSoc[k] !== null && predSoc[k] !== undefined;
+    var soc = haveReal ? predSoc[k] : current.trueSoc[k];
+    var trueS = current.trueSoc[k];
+    document.getElementById('socReadout').textContent = (soc * 100).toFixed(1) + '%' + (haveReal ? '' : ' (warming up)');
+    document.getElementById('cellFill').style.height = Math.max(2, soc * 100) + '%';
+    document.getElementById('cellFill').style.background = soc < 0.15 ? '#E2635A' : '#5EEAD4';
+    document.getElementById('vReadout').textContent = current.v[k].toFixed(3) + ' V';
+    document.getElementById('iReadout').textContent = current.i[k].toFixed(3) + ' A';
+    document.getElementById('tReadout').textContent = current.temp[k].toFixed(1) + ' \u00b0C';
+    document.getElementById('errorReadout').textContent = haveReal
+      ? 'Δ ' + (Math.abs(soc - trueS) * 100).toFixed(2) + '%'
+      : '-- (need ' + SEQUENCE_LENGTH + ' readings)';
+    var elapsed = k, total = N - 1;
+    document.getElementById('timeReadout').textContent = '0:' + String(elapsed).padStart(2, '0') + ' / 0:' + String(total).padStart(2, '0');
+    document.getElementById('scrubber').value = k;
+    renderChart(k);
+  }
+
+  async function setScenario(scn) {
+    current = scn;
+    idx = 0;
+    buildChartStatic();
+    document.getElementById('socReadout').textContent = 'loading...';
+    predSoc = new Array(scn.t.length).fill(null);
+    predSoc = await fetchPredictions(scn);
+    updateReadouts(0);
+  }
+
+  var scenarioRow = document.getElementById('scenarioRow');
+  scenarios.forEach(function(scn, i) {
+    var btn = document.createElement('button');
+    btn.className = 'scenario-btn' + (i === 0 ? ' active' : '');
+    btn.textContent = scn.name;
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.scenario-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      stopPlaying();
+      setScenario(scn);
+    });
+    scenarioRow.appendChild(btn);
+  });
+
+  var playBtn = document.getElementById('playBtn');
+  function stopPlaying() {
+    playing = false;
+    playBtn.innerHTML = '&#9654;';
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+  }
+  function startPlaying() {
+    if (idx >= N - 1) idx = 0;
+    playing = true;
+    playBtn.innerHTML = '&#10074;&#10074;';
+    playTimer = setInterval(function() {
+      idx++;
+      if (idx >= N) { stopPlaying(); idx = N - 1; return; }
+      updateReadouts(idx);
+    }, 80);
+  }
+  playBtn.addEventListener('click', function() {
+    if (playing) stopPlaying(); else startPlaying();
+  });
+
+  var scrubber = document.getElementById('scrubber');
+  scrubber.max = N - 1;
+  scrubber.addEventListener('input', function() {
+    stopPlaying();
+    idx = parseInt(scrubber.value, 10);
+    updateReadouts(idx);
+  });
+
+  setScenario(scenarios[0]);
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,9 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_PATH=/app/models/lstm_model.pth
+      - SCALER_PATH=/app/models/scaler.joblib
+      - PORT=8000

@@ -1,0 +1,49 @@
+stages:
+  parse_raw:
+    cmd: python -m src.data_processing.raw_parser --raw_dir data/raw --interim_dir data/interim --interim_plots_dir reports/figures/interim
+    deps:
+      - data/raw
+      - src/data_processing/raw_parser.py
+    outs:
+      - data/interim
+      - reports/figures/interim
+
+  estimate_soc:
+    cmd: python -m src.data_processing.soc_estimation --interim_dir data/interim --processed_dir data/processed --processed_plots_dir reports/figures/processed
+    deps:
+      - data/interim
+      - src/data_processing/soc_estimation.py
+    outs:
+      - data/processed
+      - reports/figures/processed
+
+  train:
+    cmd: python -m src.training.train --config configs/lstm.yaml
+    deps:
+      - data/processed
+      - src/data/dataset.py
+      - src/data/validation.py
+      - src/models/models.py
+      - src/training/train.py
+      - configs/lstm.yaml
+    params:
+      - configs/lstm.yaml:
+          - model
+          - training
+          - optuna
+    outs:
+      - models/lstm_model.pth
+      - models/scaler.joblib
+    metrics:
+      - models/manifest.json:
+          cache: false
+
+  feature_importance:
+    cmd: python -m src.training.feature_importance --config configs/lstm.yaml --output reports/feature_importance.json
+    deps:
+      - models/lstm_model.pth
+      - models/scaler.joblib
+      - src/training/feature_importance.py
+    metrics:
+      - reports/feature_importance.json:
+          cache: false

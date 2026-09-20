@@ -1,0 +1,17 @@
+data/
+notebooks/
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+venv/
+.venv/
+mlruns/
+mlflow.db
+logs/
+tests/
+.pytest_cache/
+.ruff_cache/
+reports/
+demo/

@@ -1,0 +1,48 @@
+seed: 42
+
+data:
+  dir: "data/processed"
+  temperatures: ["25degC", "0degC", "n10degC", "10degC", "40degC", "n20degC"]
+  split:
+    strategy: "random_by_file"   # or "by_drive_cycle_type"
+    test_size: 0.2
+    val_size: 0.1
+    random_state: 24
+
+model:
+  name: "lstm"
+  sequence_length: 20
+  kwargs:
+    input_size: 4
+    hidden_size: 94
+    num_layers: 4
+
+training:
+  batch_size: 128
+  lr: 0.0000352
+  epochs: 10
+  early_stopping_patience: 5
+
+output:
+  artifact_dir: "models"
+
+optuna:
+  enabled: true
+  n_trials: 2
+  epochs: 5
+  patience: 3
+  hidden_size_range: [10, 100]
+  num_layers_range: [1, 5]
+  lr_range: [0.00001, 0.1]
+
+mlflow:
+  enabled: true
+  # Leave tracking_uri null to use the MLFLOW_TRACKING_URI env var instead
+  # (set this to your DagsHub MLflow URI, e.g.
+  # https://dagshub.com/<user>/<repo>.mlflow -- see .env.example).
+  # Falls back to a local sqlite file if neither is set.
+  tracking_uri: null
+  experiment_name: "battery_soc"
+  registry:
+    enabled: true
+    model_name: "battery_soc_lstm"

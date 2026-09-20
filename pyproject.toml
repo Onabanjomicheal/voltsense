@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = ["data", "models", "mlruns", ".ipynb_checkpoints", "notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501", "E741"]  # E501: line length handled by formatter; E741: ambiguous
+                            # var names in raw_parser.py are ported verbatim from the
+                            # original, verified data_parsing.py -- not worth the risk
+                            # of touching working parsing logic for a style rule.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

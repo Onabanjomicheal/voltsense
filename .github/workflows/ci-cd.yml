@@ -1,0 +1,148 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint with ruff
+        run: ruff check src/ tests/
+
+      - name: Run unit tests
+        run: PYTHONPATH=. pytest tests/ -v
+
+  build-and-scan:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install DVC with DagsHub/S3-compatible support
+        run: pip install "dvc[s3]"
+
+      - name: Pull trained model from DVC remote (DagsHub)
+        run: dvc pull models/lstm_model.pth.dvc models/scaler.joblib.dvc
+        env:
+          DAGSHUB_USER_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+
+      - name: Verify model artifacts were pulled
+        run: |
+          test -f models/lstm_model.pth || (echo "Model artifact missing after dvc pull!" && exit 1)
+          test -f models/scaler.joblib || (echo "Scaler artifact missing after dvc pull!" && exit 1)
+          cat models/manifest.json
+
+      - name: Set image tag
+        id: meta
+        run: echo "image_tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image (with real model baked in)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Scan image for vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Integration test -- run the real container and hit its endpoints
+        run: |
+          docker run -d --name test-container -p 8000:8000 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          echo "Waiting for container to start..."
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:8000/health; then break; fi
+            sleep 2
+          done
+          echo "--- /health ---"
+          curl -sf http://localhost:8000/health | tee /tmp/health.json
+          grep -q '"status":"ok"' /tmp/health.json || (echo "Health check did not report ok!" && exit 1)
+          echo "--- /predict ---"
+          curl -sf -X POST http://localhost:8000/predict \
+            -H "Content-Type: application/json" \
+            -d @tests/fixtures/sample_predict_request.json | tee /tmp/predict.json
+          grep -q "predicted_soc" /tmp/predict.json || (echo "Predict did not return a prediction!" && exit 1)
+          docker stop test-container
+          docker rm test-container
+
+  deploy-staging:
+    needs: build-and-scan
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    steps:
+      - name: Trigger Render staging deploy
+        run: curl -f -X POST "${{ secrets.RENDER_STAGING_DEPLOY_HOOK_URL }}"
+
+      - name: Wait and verify staging health
+        run: |
+          sleep 60
+          curl -sf "${{ secrets.STAGING_URL }}/health" || (echo "Staging health check failed!" && exit 1)
+
+  # This job will pause and wait for manual approval -- requires a GitHub
+  # Environment named "production" with required reviewers configured in
+  # repo Settings -> Environments.
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Trigger Render production deploy
+        run: curl -f -X POST "${{ secrets.RENDER_PRODUCTION_DEPLOY_HOOK_URL }}"
+
+      - name: Wait and verify production health
+        run: |
+          sleep 60
+          curl -sf "${{ secrets.PRODUCTION_URL }}/health" || (echo "Production health check failed!" && exit 1)
