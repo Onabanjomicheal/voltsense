@@ -1,0 +1,17 @@
+\begin{table}[t]
+\centering
+\caption{Test MAE (\%) per ambient temperature on held-out cycles, mean $\pm$ standard deviation over three seeds.}
+\label{tab:mae_temperature}
+\begin{tabular}{lrrr}
+\toprule
+Temp. (\textdegree C) & LSTM & GRU & CNN-BiLSTM-Attention \\
+\midrule
+$-20$ & \textbf{1.206 $\pm$ 0.095} & 1.276 $\pm$ 0.108 & 1.312 $\pm$ 0.078 \\
+$-10$ & 1.604 $\pm$ 0.144 & \textbf{1.458 $\pm$ 0.173} & 1.672 $\pm$ 0.035 \\
+0 & 1.131 $\pm$ 0.103 & \textbf{1.074 $\pm$ 0.101} & 1.337 $\pm$ 0.025 \\
+10 & \textbf{0.679 $\pm$ 0.036} & 0.747 $\pm$ 0.110 & 0.848 $\pm$ 0.056 \\
+25 & \textbf{0.388 $\pm$ 0.026} & 0.447 $\pm$ 0.069 & 0.608 $\pm$ 0.094 \\
+40 & \textbf{0.454 $\pm$ 0.041} & 0.558 $\pm$ 0.134 & 0.707 $\pm$ 0.099 \\
+\bottomrule
+\end{tabular}
+\end{table}

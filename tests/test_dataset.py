@@ -1,6 +1,9 @@
+
 """Tests for src/data/dataset.py -- covers the real bugs found and fixed during
 this project: scaler leakage, cross-file window contamination, and the
 CC_Capacity serving-mismatch issue."""
+import os
+
 import numpy as np
 import pandas as pd
 
@@ -39,7 +42,7 @@ def test_skip_constant_charge_discharge_files(tmp_path):
                        "Temperature [degC]": [25.0], "SOC [-]": [1.0]}).to_csv(temp_dir / name, index=False)
 
     files = list_drive_cycle_files(str(tmp_path), ["25degC"])
-    names = [f.split("/")[-1] for f in files]
+    names = [os.path.basename(f) for f in files]
     assert "Mixed1.csv" in names
     assert "UDDS1.csv" in names
     assert not any("Charge" in n or "Dis" in n for n in names)

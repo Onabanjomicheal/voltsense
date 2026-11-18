@@ -17,33 +17,51 @@ stages:
       - data/processed
       - reports/figures/processed
 
-  train:
-    cmd: python -m src.training.train --config configs/lstm.yaml
-    deps:
-      - data/processed
-      - src/data/dataset.py
-      - src/data/validation.py
-      - src/models/models.py
-      - src/training/train.py
-      - configs/lstm.yaml
-    params:
-      - configs/lstm.yaml:
-          - model
-          - training
-          - optuna
-    outs:
-      - models/lstm_model.pth
-      - models/scaler.joblib
-    metrics:
-      - models/manifest.json:
-          cache: false
-
-  feature_importance:
-    cmd: python -m src.training.feature_importance --config configs/lstm.yaml --output reports/feature_importance.json
-    deps:
-      - models/lstm_model.pth
-      - models/scaler.joblib
-      - src/training/feature_importance.py
-    metrics:
-      - reports/feature_importance.json:
-          cache: false
+  train_seeds:
+    foreach:
+      lstm_random:
+        model: lstm
+        protocol: random
+        flags: ""
+      gru_random:
+        model: gru
+        protocol: random
+        flags: ""
+      cnn_random:
+        model: cnn_bilstm_attention
+        protocol: random
+        flags: ""
+      lstm_holdout:
+        model: lstm
+        protocol: cycle_holdout
+        flags: "--train-cycles Mixed HWFET LA92 --test-cycles UDDS US06"
+      gru_holdout:
+        model: gru
+        protocol: cycle_holdout
+        flags: "--train-cycles Mixed HWFET LA92 --test-cycles UDDS US06"
+      cnn_holdout:
+        model: cnn_bilstm_attention
+        protocol: cycle_holdout
+        flags: "--train-cycles Mixed HWFET LA92 --test-cycles UDDS US06"
+    do:
+      cmd: python -m src.training.run_seeds --config configs/${item.model}.yaml --protocol ${item.protocol} ${item.flags}
+      deps:
+        - data/processed
+        - src/data/dataset.py
+        - src/data/validation.py
+        - src/models/models.py
+        - src/training/train.py
+        - src/training/run_seeds.py
+        - configs/${item.model}.yaml
+      params:
+        - configs/${item.model}.yaml:
+            - model
+            - training
+            - optuna
+      outs:
+        - models/runs/${item.protocol}/${item.model}_seed42:
+            persist: true
+        - models/runs/${item.protocol}/${item.model}_seed43:
+            persist: true
+        - models/runs/${item.protocol}/${item.model}_seed44:
+            persist: true

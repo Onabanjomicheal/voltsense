@@ -1,0 +1,19 @@
+\begin{table*}[t]
+\centering
+\caption{Test MAE, RMSE and R$^2$ per ambient temperature on held-out cycles, mean $\pm$ standard deviation over three seeds.}
+\label{tab:per_temperature}
+\begin{tabular}{lrrrrrrrrr}
+\toprule
+Temp. (\textdegree C) & \multicolumn{3}{c}{LSTM} & \multicolumn{3}{c}{GRU} & \multicolumn{3}{c}{CNN-BiLSTM-Attention} \\
+\cmidrule(lr){2-4} \cmidrule(lr){5-7} \cmidrule(lr){8-10}
+ & MAE (\%) & RMSE (\%) & R$^2$ & MAE (\%) & RMSE (\%) & R$^2$ & MAE (\%) & RMSE (\%) & R$^2$ \\
+\midrule
+$-20$ & \textbf{1.206 $\pm$ 0.095} & \textbf{1.536 $\pm$ 0.105} & \textbf{0.9936 $\pm$ 0.0009} & 1.276 $\pm$ 0.108 & 1.616 $\pm$ 0.140 & 0.9929 $\pm$ 0.0013 & 1.312 $\pm$ 0.078 & 1.581 $\pm$ 0.105 & 0.9932 $\pm$ 0.0009 \\
+$-10$ & 1.604 $\pm$ 0.144 & 2.102 $\pm$ 0.152 & 0.9930 $\pm$ 0.0010 & \textbf{1.458 $\pm$ 0.173} & \textbf{1.881 $\pm$ 0.187} & \textbf{0.9944 $\pm$ 0.0011} & 1.672 $\pm$ 0.035 & 2.066 $\pm$ 0.064 & 0.9933 $\pm$ 0.0004 \\
+0 & 1.131 $\pm$ 0.103 & 1.534 $\pm$ 0.102 & 0.9969 $\pm$ 0.0004 & \textbf{1.074 $\pm$ 0.101} & \textbf{1.420 $\pm$ 0.145} & \textbf{0.9973 $\pm$ 0.0005} & 1.337 $\pm$ 0.025 & 1.664 $\pm$ 0.033 & 0.9963 $\pm$ 0.0001 \\
+10 & \textbf{0.679 $\pm$ 0.036} & \textbf{0.921 $\pm$ 0.029} & \textbf{0.9989 $\pm$ 0.0001} & 0.747 $\pm$ 0.110 & 0.959 $\pm$ 0.113 & 0.9988 $\pm$ 0.0003 & 0.848 $\pm$ 0.056 & 1.096 $\pm$ 0.057 & 0.9984 $\pm$ 0.0002 \\
+25 & \textbf{0.388 $\pm$ 0.026} & \textbf{0.541 $\pm$ 0.027} & \textbf{0.9996 $\pm$ 0.0000} & 0.447 $\pm$ 0.069 & 0.576 $\pm$ 0.056 & 0.9996 $\pm$ 0.0001 & 0.608 $\pm$ 0.094 & 0.773 $\pm$ 0.114 & 0.9992 $\pm$ 0.0002 \\
+40 & \textbf{0.454 $\pm$ 0.041} & \textbf{0.610 $\pm$ 0.043} & \textbf{0.9995 $\pm$ 0.0001} & 0.558 $\pm$ 0.134 & 0.705 $\pm$ 0.133 & 0.9994 $\pm$ 0.0002 & 0.707 $\pm$ 0.099 & 0.875 $\pm$ 0.115 & 0.9991 $\pm$ 0.0002 \\
+\bottomrule
+\end{tabular}
+\end{table*}

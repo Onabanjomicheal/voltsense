@@ -67,30 +67,42 @@ def generate_and_save_plot(data_df: pd.DataFrame, save_file_path: str, fig_title
 
 
 def parse_all_raw_files(raw_data_directory: str, interim_data_directory: str, interim_plots_directory: str):
-    """DVC stage entrypoint: data/raw -> data/interim, for every temperature folder and CSV."""
+    """DVC stage entrypoint: data/raw -> data/interim, for every temperature folder and CSV.
+
+    Every file is still parsed to data/interim, but only the FIRST file found in each
+    temperature folder gets a diagnostic plot -> one representative PDF per dataset,
+    not one per file.
+    """
     temperatures = [d for d in os.listdir(raw_data_directory) if "degC" in d]
+    os.makedirs(interim_plots_directory, exist_ok=True)
 
     for T in temperatures:
         raw_dir = os.path.join(raw_data_directory, T)
         interim_dir = os.path.join(interim_data_directory, T)
-        interim_plots_dir = os.path.join(interim_plots_directory, T)
         os.makedirs(interim_dir, exist_ok=True)
-        os.makedirs(interim_plots_dir, exist_ok=True)
 
         csv_files = [f for f in os.listdir(raw_dir) if f.endswith(".csv")]
+        plotted_this_dataset = False
+
         for csv_file in csv_files:
             name = csv_file[:-4]
             try:
                 df = parse_raw_data(os.path.join(raw_dir, csv_file))
                 df.to_csv(os.path.join(interim_dir, f"{name}_parsed.csv"), index=False)
-                generate_and_save_plot(
-                    df,
-                    os.path.join(interim_plots_dir, f"{name}_parsed_plot.pdf"),
-                    fig_title=f"{name} Parsed @ {T}",
-                )
                 logging.info(f"Parsed {name} @ {T}")
+
+                if not plotted_this_dataset:
+                    generate_and_save_plot(
+                        df,
+                        os.path.join(interim_plots_directory, f"{T}_parsed_plot.pdf"),
+                        fig_title=f"{name} Parsed @ {T} (sample file)",
+                    )
+                    plotted_this_dataset = True
             except Exception as e:
                 logging.error(f"Error parsing {name} @ {T}: {e}")
+
+        if not plotted_this_dataset:
+            logging.warning(f"No files parsed for {T}; skipping dataset plot")
 
 
 if __name__ == "__main__":

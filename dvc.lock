@@ -1,0 +1,51 @@
+schema: '2.0'
+stages:
+  parse_raw:
+    cmd: python -m src.data_processing.raw_parser --raw_dir data/raw 
+      --interim_dir data/interim --interim_plots_dir reports/figures/interim
+    deps:
+    - path: data/raw
+      hash: md5
+      md5: a7d1bc19f5086ccbecffd785e05f8e78.dir
+      size: 639633692
+      nfiles: 209
+    - path: src/data_processing/raw_parser.py
+      hash: md5
+      md5: 96d7f5587b0d4c523b62b9fe05c03033
+      size: 4674
+    outs:
+    - path: data/interim
+      hash: md5
+      md5: 552dbed0bf14e241de56ed9df0fd0cfd.dir
+      size: 436211582
+      nfiles: 207
+    - path: reports/figures/interim
+      hash: md5
+      md5: b8e3b44a9274b6c8caf9883d574725ba.dir
+      size: 211199
+      nfiles: 6
+  estimate_soc:
+    cmd: python -m src.data_processing.soc_estimation --interim_dir data/interim
+      --processed_dir data/processed --processed_plots_dir 
+      reports/figures/processed
+    deps:
+    - path: data/interim
+      hash: md5
+      md5: 552dbed0bf14e241de56ed9df0fd0cfd.dir
+      size: 436211582
+      nfiles: 207
+    - path: src/data_processing/soc_estimation.py
+      hash: md5
+      md5: 9ed79b8010c9476f2c1cbb4047a1a591
+      size: 7355
+    outs:
+    - path: data/processed
+      hash: md5
+      md5: 40471ba310fbf048f8eaab9f928efd01.dir
+      size: 72801912
+      nfiles: 199
+    - path: reports/figures/processed
+      hash: md5
+      md5: 0d59d6ce8a8b78f114337b913ec6829f.dir
+      size: 9471643
+      nfiles: 199

@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: onabanjomicheal/voltsense
 
 jobs:
   test:
@@ -25,10 +25,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
 
       - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install -r requirements.txt
 
       - name: Lint with ruff
         run: ruff check src/ tests/
@@ -59,7 +59,8 @@ jobs:
       - name: Pull trained model from DVC remote (DagsHub)
         run: dvc pull models/lstm_model.pth.dvc models/scaler.joblib.dvc
         env:
-          DAGSHUB_USER_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.DAGSHUB_TOKEN }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.DAGSHUB_TOKEN }}
 
       - name: Verify model artifacts were pulled
         run: |
@@ -123,12 +124,12 @@ jobs:
       name: staging
     steps:
       - name: Trigger Render staging deploy
-        run: curl -f -X POST "${{ secrets.RENDER_STAGING_DEPLOY_HOOK_URL }}"
+        run: curl -f -X POST "${{ secrets.RENDER_STAGING_DEPLOY_HOOK_URL }}&imgURL=ghcr.io%2Fonabanjomicheal%2Fvoltsense%3A${{ github.sha }}"
 
       - name: Wait and verify staging health
         run: |
           sleep 60
-          curl -sf "${{ secrets.STAGING_URL }}/health" || (echo "Staging health check failed!" && exit 1)
+          curl -sf --retry 12 --retry-delay 10 --retry-all-errors "${{ secrets.STAGING_URL }}/health" || (echo "Staging health check failed!" && exit 1)
 
   # This job will pause and wait for manual approval -- requires a GitHub
   # Environment named "production" with required reviewers configured in
@@ -140,9 +141,9 @@ jobs:
       name: production
     steps:
       - name: Trigger Render production deploy
-        run: curl -f -X POST "${{ secrets.RENDER_PRODUCTION_DEPLOY_HOOK_URL }}"
+        run: curl -f -X POST "${{ secrets.RENDER_PRODUCTION_DEPLOY_HOOK_URL }}&imgURL=ghcr.io%2Fonabanjomicheal%2Fvoltsense%3A${{ github.sha }}"
 
       - name: Wait and verify production health
         run: |
           sleep 60
-          curl -sf "${{ secrets.PRODUCTION_URL }}/health" || (echo "Production health check failed!" && exit 1)
+          curl -sf --retry 12 --retry-delay 10 --retry-all-errors "${{ secrets.PRODUCTION_URL }}/health" || (echo "Production health check failed!" && exit 1)

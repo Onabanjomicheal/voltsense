@@ -1,33 +1,21 @@
-"""
-Training entrypoint for the SoC LSTM model.
-
-Usage:
-    python -m src.training.train --config configs/lstm.yaml
-
-Fixes vs. the original notebooks:
-  - Scaler is fit on TRAIN split only (original fit on full dataset before split = leakage).
-  - Early stopping actually stops (original had `break` commented out).
-  - Optuna's result is actually used for final training (original silently discarded it).
-  - Sequence windows never cross file boundaries (original could splice unrelated files).
-  - Seeds are fixed everywhere for reproducibility.
-  - CC_Capacity removed from features (meaningless in short serving windows).
-"""
 import argparse
 import json
 import os
 import random
+from collections import Counter
 from datetime import datetime, timezone
 
 import numpy as np
 import torch
 import yaml
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.metrics import max_error, mean_absolute_error, mean_squared_error, r2_score
 from torch.utils.data import DataLoader
 
 from src.data.dataset import (
     FEATURE_COLUMNS,
     SoCWindowDataset,
     SplitConfig,
+    build_cycle_balanced_sampler,
     fit_scaler_on_train,
     list_drive_cycle_files,
     load_files,
@@ -59,12 +47,15 @@ def evaluate(model, loader, device):
     with torch.no_grad():
         for x, y in loader:
             x = x.to(device)
-            out = model(x).squeeze(-1).cpu().numpy()
+            out = model(x).cpu().numpy().reshape(-1)
             preds.extend(out.tolist())
-            trues.extend(y.numpy().tolist())
+            trues.extend(y.numpy().reshape(-1).tolist())
     mse = mean_squared_error(trues, preds)
     mae = mean_absolute_error(trues, preds)
-    return mse, mae, preds, trues
+    rmse = mse ** 0.5
+    r2 = r2_score(trues, preds) if len(set(trues)) > 1 else float("nan")
+    max_abs_error = max_error(trues, preds)
+    return {"mse": mse, "mae": mae, "rmse": rmse, "r2": r2, "max_error": max_abs_error}, preds, trues
 
 
 def per_temperature_eval(model, df, scaler, cfg, device):
@@ -77,8 +68,8 @@ def per_temperature_eval(model, df, scaler, cfg, device):
         if len(ds) == 0:
             continue
         loader = DataLoader(ds, batch_size=cfg["training"]["batch_size"])
-        mse, mae, _, _ = evaluate(model, loader, device)
-        results[temp] = {"mse": mse, "mae": mae, "n_samples": len(ds)}
+        metrics, _, _ = evaluate(model, loader, device)
+        results[temp] = {**metrics, "n_samples": len(ds)}
     return results
 
 
@@ -96,15 +87,13 @@ def load_all_with_temp_tag(data_dir, temp_folders):
 
 def train_model(model, train_loader, val_loader, train_ds_len, device, lr, epochs, patience,
                  mlflow_run=None, log_prefix=""):
-    """One reusable training run -- used both by Optuna trials and the final training pass,
-    so search and final training can never silently diverge in logic."""
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     loss_fn = torch.nn.MSELoss()
 
     best_val = float("inf")
     epochs_no_improve = 0
     best_state = None
-    history = {"train_loss": [], "val_mse": [], "val_mae": []}
+    history = {"train_loss": [], "val_mse": [], "val_mae": [], "val_rmse": [], "val_r2": []}
 
     for epoch in range(epochs):
         model.train()
@@ -119,15 +108,23 @@ def train_model(model, train_loader, val_loader, train_ds_len, device, lr, epoch
             running_loss += loss.item() * x.size(0)
         train_loss = running_loss / max(train_ds_len, 1)
 
-        val_mse, val_mae, _, _ = evaluate(model, val_loader, device)
+        val_metrics, _, _ = evaluate(model, val_loader, device)
+        val_mse = val_metrics["mse"]
         history["train_loss"].append(train_loss)
         history["val_mse"].append(val_mse)
-        history["val_mae"].append(val_mae)
+        history["val_mae"].append(val_metrics["mae"])
+        history["val_rmse"].append(val_metrics["rmse"])
+        history["val_r2"].append(val_metrics["r2"])
         logger.info(f"{log_prefix}epoch {epoch+1}/{epochs} train_loss={train_loss:.6f} "
-                    f"val_mse={val_mse:.6f} val_mae={val_mae:.6f}")
+                    f"val_mse={val_mse:.6f} val_mae={val_metrics['mae']:.6f} "
+                    f"val_rmse={val_metrics['rmse']:.6f} val_r2={val_metrics['r2']:.4f} "
+                    f"val_max_err={val_metrics['max_error']:.4f}")
 
         if mlflow_run:
-            mlflow.log_metrics({"train_loss": train_loss, "val_mse": val_mse, "val_mae": val_mae}, step=epoch)
+            mlflow.log_metrics(
+                {"train_loss": train_loss, **{f"val_{k}": v for k, v in val_metrics.items()}},
+                step=epoch,
+            )
 
         if val_mse < best_val:
             best_val = val_mse
@@ -145,9 +142,6 @@ def train_model(model, train_loader, val_loader, train_ds_len, device, lr, epoch
 
 
 def run_optuna_search(cfg, train_ds, val_ds, train_loader, val_loader, seq_len, device):
-    """Real hyperparameter search. Returns the ACTUAL best params found -- these get
-    used for final training, unlike the original notebook where Optuna's result was
-    silently discarded and a hardcoded value was used instead."""
     import optuna
 
     opt_cfg = cfg["optuna"]
@@ -160,7 +154,7 @@ def run_optuna_search(cfg, train_ds, val_ds, train_loader, val_loader, seq_len, 
         }
         lr = trial.suggest_float("learning_rate", *opt_cfg["lr_range"], log=True)
 
-        model = build_model("lstm", **kwargs).to(device)
+        model = build_model(cfg["model"]["name"], **kwargs).to(device)
         _, best_val, _ = train_model(
             model, train_loader, val_loader, len(train_ds), device,
             lr=lr, epochs=opt_cfg["epochs"], patience=opt_cfg.get("patience", 3),
@@ -208,7 +202,17 @@ def main(config_path: str):
     test_ds = SoCWindowDataset(test_df, scaler, sequence_length=seq_len)
 
     bs = cfg["training"]["batch_size"]
-    train_loader = DataLoader(train_ds, batch_size=bs, shuffle=True)
+
+    balance_cycles = cfg["training"].get("balance_by_cycle_type", False)
+    if balance_cycles:
+        sampler = build_cycle_balanced_sampler(train_ds)
+        train_loader = DataLoader(train_ds, batch_size=bs, sampler=sampler)
+        logger.info(f"Cycle-type balancing ENABLED. Training window counts by type: "
+                    f"{dict(Counter(train_ds.cycle_types))}")
+    else:
+        train_loader = DataLoader(train_ds, batch_size=bs, shuffle=True)
+        logger.info("Cycle-type balancing disabled -- using plain shuffle.")
+
     val_loader = DataLoader(val_ds, batch_size=bs)
     test_loader = DataLoader(test_ds, batch_size=bs)
 
@@ -224,7 +228,7 @@ def main(config_path: str):
     else:
         logger.info(f"Optuna disabled -- using config hyperparameters: {model_kwargs}, lr={final_lr}")
 
-    model = build_model("lstm", **model_kwargs).to(device)
+    model = build_model(cfg["model"]["name"], **model_kwargs).to(device)
 
     patience = cfg["training"].get("early_stopping_patience", 5)
 
@@ -243,25 +247,30 @@ def main(config_path: str):
         model, best_val, history = train_model(
             model, train_loader, val_loader, len(train_ds), device,
             lr=final_lr, epochs=cfg["training"]["epochs"], patience=patience,
-            mlflow_run=run_ctx, log_prefix="[lstm] "
+            mlflow_run=run_ctx, log_prefix=f"[{cfg['model']['name']}] "
         )
 
-        test_mse, test_mae, _, _ = evaluate(model, test_loader, device)
-        logger.info(f"[lstm] FINAL test_mse={test_mse:.6f} test_mae={test_mae:.6f}")
+        test_metrics, _, _ = evaluate(model, test_loader, device)
+        test_mse, test_mae = test_metrics["mse"], test_metrics["mae"]
+        logger.info(f"[{cfg['model']['name']}] FINAL test_mse={test_mse:.6f} test_mae={test_mae:.6f} "
+                    f"test_rmse={test_metrics['rmse']:.6f} test_r2={test_metrics['r2']:.4f} "
+                    f"test_max_err={test_metrics['max_error']:.4f}")
 
         temp_df = load_all_with_temp_tag(data_dir, temps)
         per_temp = {}
         if temp_df is not None:
-            test_file_set = set(os.path.basename(f) for f in test_files)
+            test_file_set = {os.path.normpath(f) for f in test_files}
             temp_test_df = temp_df[temp_df["__file__"].isin(test_file_set)]
             per_temp = per_temperature_eval(model, temp_test_df, scaler, cfg, device)
             for temp, metrics in per_temp.items():
-                logger.info(f"  [{temp}] mse={metrics['mse']:.6f} mae={metrics['mae']:.6f} n={metrics['n_samples']}")
+                logger.info(f"  [{temp}] mse={metrics['mse']:.6f} mae={metrics['mae']:.6f} "
+                            f"rmse={metrics['rmse']:.6f} r2={metrics['r2']:.4f} "
+                            f"max_err={metrics['max_error']:.4f} n={metrics['n_samples']}")
 
-        model_path = os.path.join(cfg["output"]["artifact_dir"], "lstm_model.pth")
+        model_path = os.path.join(cfg["output"]["artifact_dir"], "model.pth")
         torch.save({
             "model_state_dict": model.state_dict(),
-            "model_name": "lstm",
+            "model_name": cfg["model"]["name"],
             "model_kwargs": model_kwargs,
             "sequence_length": seq_len,
             "feature_columns": FEATURE_COLUMNS,
@@ -272,10 +281,14 @@ def main(config_path: str):
         mlflow_run_id = run_ctx.info.run_id if run_ctx else None
 
         manifest = {
-            "model_name": "lstm",
+            "model_name": cfg["model"]["name"],
             "mlflow_run_id": mlflow_run_id,
+            "balance_by_cycle_type": balance_cycles,
             "test_mse": test_mse,
             "test_mae": test_mae,
+            "test_rmse": test_metrics["rmse"],
+            "test_r2": test_metrics["r2"],
+            "test_max_error": test_metrics["max_error"],
             "per_temperature": per_temp,
             "hyperparameters": model_kwargs,
             "final_learning_rate": final_lr,
@@ -287,9 +300,11 @@ def main(config_path: str):
         logger.info(f"Saved traceability manifest to {manifest_path}")
 
         if run_ctx:
-            mlflow.log_metrics({"test_mse": test_mse, "test_mae": test_mae})
+            mlflow.log_metrics({f"test_{k}": v for k, v in test_metrics.items()})
             for temp, metrics in per_temp.items():
-                mlflow.log_metrics({f"test_mse_{temp}": metrics["mse"], f"test_mae_{temp}": metrics["mae"]})
+                mlflow.log_metrics(
+                    {f"test_{k}_{temp}": v for k, v in metrics.items() if k != "n_samples"}
+                )
             mlflow.log_artifact(model_path)
             mlflow.log_artifact(scaler_path)
             mlflow.log_artifact(manifest_path)
@@ -331,7 +346,7 @@ def main(config_path: str):
         if run_ctx:
             mlflow.end_run()
 
-    return {"test_mse": test_mse, "test_mae": test_mae, "per_temperature": per_temp}
+    return {**test_metrics, "per_temperature": per_temp}
 
 
 if __name__ == "__main__":

@@ -1,0 +1,4 @@
+model,parameters,size_mb,inference_ms
+LSTM,51265,0.1987,3.5215
+GRU,38465,0.1499,27.3389
+CNN-BiLSTM-Attention,150178,0.5786,4.0789

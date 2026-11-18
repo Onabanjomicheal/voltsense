@@ -1,8 +1,9 @@
 services:
   - type: web
     name: battery-soc-api-staging
-    runtime: docker
-    dockerfilePath: ./Dockerfile
+    runtime: image
+    image:
+      url: ghcr.io/onabanjomicheal/voltsense:latest
     plan: free
     region: oregon
     healthCheckPath: /health
@@ -11,4 +12,4 @@ services:
         value: /app/models/lstm_model.pth
       - key: SCALER_PATH
         value: /app/models/scaler.joblib
-    autoDeploy: false  # deploy is triggered explicitly by CI, not Render's own git watcher
+    autoDeploy: false  # deploy is triggered explicitly by CI

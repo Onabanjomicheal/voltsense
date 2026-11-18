@@ -1,0 +1,44 @@
+seed: 42
+
+data:
+  dir: "data/processed"
+  temperatures: ["25degC", "0degC", "n10degC", "10degC", "40degC", "n20degC"]
+  split:
+    strategy: "random_by_file"
+    test_size: 0.2
+    val_size: 0.1
+    random_state: 24
+
+model:
+  name: "gru"
+  sequence_length: 100
+  kwargs:
+    input_size: 4
+    hidden_size: 64
+    num_layers: 2
+
+training:
+  batch_size: 128
+  lr: 0.001
+  epochs: 30
+  early_stopping_patience: 5
+  balance_by_cycle_type: true
+
+output:
+  artifact_dir: "models/gru"
+
+optuna:
+  enabled: false
+  n_trials: 8
+  epochs: 10
+  patience: 3
+  hidden_size_range: [32, 128]
+  num_layers_range: [1, 3]
+  lr_range: [0.0001, 0.005]
+
+mlflow:
+  enabled: false
+  tracking_uri: null
+  experiment_name: "battery_soc"
+  registry:
+    enabled: false

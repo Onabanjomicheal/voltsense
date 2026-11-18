@@ -1,0 +1,14 @@
+\begin{table}[t]
+\centering
+\caption{Overall test performance, mean $\pm$ standard deviation over seeds (random protocol).}
+\label{tab:overall_seeds_random}
+\begin{tabular}{lrrrr}
+\toprule
+Model & Seeds & MAE & RMSE & R$^2$ \\
+\midrule
+LSTM & 3 & 0.00758 $\pm$ 0.00019 & 0.01095 $\pm$ 0.00023 & 0.9984 $\pm$ 0.0001 \\
+GRU & 3 & \textbf{0.00694 $\pm$ 0.00077} & \textbf{0.00950 $\pm$ 0.00068} & \textbf{0.9988 $\pm$ 0.0002} \\
+CNN-BiLSTM-Attention & 3 & 0.00776 $\pm$ 0.00045 & 0.01103 $\pm$ 0.00050 & 0.9984 $\pm$ 0.0001 \\
+\bottomrule
+\end{tabular}
+\end{table}

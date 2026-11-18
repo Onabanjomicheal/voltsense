@@ -52,7 +52,8 @@ def test_full_training_pipeline_runs_end_to_end(tmp_path, synthetic_processed_di
     )
     assert len(history["train_loss"]) == 2
 
-    test_mse, test_mae, _, _ = evaluate(model, test_loader, device)
+    metrics, _, _ = evaluate(model, test_loader, device)
+    test_mse, test_mae = metrics["mse"], metrics["mae"]
     assert test_mse >= 0 and test_mae >= 0
 
     model_path = tmp_path / "model.pth"

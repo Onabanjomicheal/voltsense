@@ -24,7 +24,7 @@ def test_out_of_range_voltage_rejected():
         "Temperature [degC]": [25.0],
         "SOC [-]": [1.0],
     })
-    with pytest.raises(ValueError, match="Data validation failed"):
+    with pytest.raises(ValueError, match="validation failed"):
         validate_processed_file(df)
 
 

@@ -1,0 +1,14 @@
+\begin{table}[t]
+\centering
+\caption{Overall test performance on held-out cycles (UDDS and US06), mean $\pm$ standard deviation over three seeds.}
+\label{tab:overall}
+\begin{tabular}{lrrr}
+\toprule
+Model & MAE (\%) & RMSE (\%) & R$^2$ \\
+\midrule
+LSTM & \textbf{0.851 $\pm$ 0.037} & 1.268 $\pm$ 0.050 & 0.9978 $\pm$ 0.0002 \\
+GRU & 0.871 $\pm$ 0.106 & \textbf{1.220 $\pm$ 0.117} & \textbf{0.9980 $\pm$ 0.0004} \\
+CNN-BiLSTM-Attention & 1.031 $\pm$ 0.041 & 1.368 $\pm$ 0.031 & 0.9975 $\pm$ 0.0001 \\
+\bottomrule
+\end{tabular}
+\end{table}
