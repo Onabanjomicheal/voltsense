@@ -2,7 +2,7 @@
 # Battery SoC Estimator API
 # Model + scaler are baked into the image at build time.
 
-FROM python:3.11-slim
+FROM python:3.15-slim
 
 # Update operating system packages.
 RUN apt-get update \
