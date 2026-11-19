@@ -11,7 +11,7 @@ WORKDIR /app
 
 COPY requirements-serving.txt .
 RUN pip install --no-cache-dir --upgrade pip "wheel>=0.46.2" setuptools && pip install --no-cache-dir -r requirements-serving.txt
-RUN find / -name "setuptools-*" -not -path "/proc/*" 2>/dev/null; pip list 2>/dev/null | grep -i setuptools
+RUN grep -rl --include=METADATA --include=PKG-INFO "^Version: 70[.]3[.]0" /usr /opt /root /home 2>/dev/null; true
 
 COPY src/ ./src/
 
