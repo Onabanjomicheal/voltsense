@@ -88,6 +88,19 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
+      - name: Locate vulnerable package paths (temporary diagnostic)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: json
+          output: trivy-report.json
+          exit-code: "0"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Print vulnerable package paths (temporary diagnostic)
+        run: jq -r '.Results[]? | .Vulnerabilities[]? | [.PkgName, .InstalledVersion, .VulnerabilityID, (.PkgPath // "no path")] | @tsv' trivy-report.json
+
       - name: Scan image for vulnerabilities (Trivy)
         uses: aquasecurity/trivy-action@master
         with:
